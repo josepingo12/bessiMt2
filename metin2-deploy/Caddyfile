@@ -1,0 +1,3 @@
+bessimt2.ddns.net {
+    reverse_proxy web:80
+}

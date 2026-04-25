@@ -1,0 +1,12 @@
+# Secret files
+.env
+*.pyc
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

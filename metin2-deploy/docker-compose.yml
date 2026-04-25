@@ -1,0 +1,241 @@
+x-environment:
+  &common-environment
+    MYSQL_HOST: ${MYSQL_HOST}
+    MYSQL_USER: ${MYSQL_USER}
+    MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    MYSQL_PORT: ${MYSQL_PORT}
+    MYSQL_DB_ACCOUNT: ${MYSQL_DB_ACCOUNT}
+    MYSQL_DB_PLAYER: ${MYSQL_DB_PLAYER}
+    MYSQL_DB_COMMON: ${MYSQL_DB_COMMON}
+    MYSQL_DB_LOG: ${MYSQL_DB_LOG}
+
+    TEST_SERVER: ${TEST_SERVER}
+
+    DB_ADDR: ${DB_ADDR}
+    DB_PORT: ${DB_PORT}
+
+    PUBLIC_IP: ${PUBLIC_IP}
+    GAME_MAX_LEVEL: ${GAME_MAX_LEVEL}
+    WEB_APP_URL: ${WEB_APP_URL}
+    WEB_APP_KEY: ${WEB_APP_KEY}
+
+services:
+  # MySQL Database
+  mysql:
+    # The biarms/mysql Docker image supports ARM machines; you may also use mysql:5.5
+    image: biarms/mysql:5.5
+    restart: always
+    environment:
+      # Password for root access
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - '${MYSQL_EXTERNAL_PORT}:${MYSQL_PORT}'
+    expose:
+      - ${MYSQL_PORT}
+    volumes:
+      - ./storage/database/:/var/lib/mysql/
+      - ./assets/db-init/:/docker-entrypoint-initdb.d/:ro
+    healthcheck:
+      test: mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  # Web management system
+  web:
+    image: ${WEB_IMAGE}
+    restart: always
+    environment:
+      # Application config
+      APP_NAME: ${WEB_APP_NAME}
+      APP_ENV: ${WEB_APP_ENV}
+      APP_KEY: ${WEB_APP_KEY}
+      APP_URL: ${WEB_APP_URL}
+
+      # Database credentials
+      DB_HOST: ${MYSQL_HOST}
+      DB_PORT: ${MYSQL_PORT}
+      DB_USERNAME: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+
+      # E-mail config
+      MAIL_MAILER: ${WEB_MAIL_MAILER}
+      MAIL_HOST: ${WEB_MAIL_HOST}
+      MAIL_PORT: ${WEB_MAIL_PORT}
+      MAIL_USERNAME: ${WEB_MAIL_USERNAME}
+      MAIL_PASSWORD: ${WEB_MAIL_PASSWORD}
+      MAIL_ENCRYPTION: ${WEB_MAIL_ENCRYPTION}
+      MAIL_FROM_ADDRESS: ${WEB_MAIL_FROM_ADDRESS}
+      MAIL_FROM_NAME: ${WEB_MAIL_FROM_NAME}
+    ports:
+      - '${WEB_EXTERNAL_PORT}:80'
+    volumes:
+      - ./storage/web/:/app/storage/
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail http://localhost:80/ || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # HTTPS Reverse Proxy (auto Let's Encrypt)
+  caddy:
+    image: caddy:latest
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./storage/caddy/data:/data
+      - ./storage/caddy/config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+
+  # DBCache Server
+  db:
+    image: ${GAME_IMAGE}
+    restart: always
+    environment: *common-environment
+    expose:
+      - ${DB_PORT}
+    command: db
+    volumes:
+      - ./storage/log/db/:/app/log/
+    depends_on:
+      mysql:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+  
+  # Auth server
+  auth:
+    image: ${GAME_IMAGE}
+    restart: always
+    environment:
+      <<: *common-environment
+      MYSQL_DB_PLAYER: ${MYSQL_DB_ACCOUNT}
+      GAME_HOSTNAME: auth
+      GAME_CHANNEL: 1
+      GAME_AUTH_SERVER: master
+      GAME_PORT: 11000
+      GAME_P2P_PORT: 12000
+    expose:
+      - 11000
+      - 12000
+    ports:
+      - '0.0.0.0:11000:11000'
+    command: game
+    volumes:
+      - ./storage/log/auth/:/app/log/
+    depends_on:
+      mysql:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+  # Game server (CH1)
+  ch1_first:
+    image: ${GAME_IMAGE}
+    restart: always
+    environment:
+      <<: *common-environment
+      GAME_HOSTNAME: ch1_first
+      GAME_CHANNEL: 1
+      GAME_MARK_SERVER: 1
+      GAME_PORT: 13000
+      GAME_P2P_PORT: 14000
+      GAME_MAP_ALLOW: 1 4 5 6 3 23 43 112 107 67 68 72 208 302 304
+    expose:
+      - 13000
+      - 14000
+    ports:
+      - '0.0.0.0:13000:13000'
+    command: game
+    volumes:
+      - ./storage/log/ch1/first/:/app/log/
+      - ./storage/mark/:/app/mark/
+    depends_on:
+      mysql:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+  
+  ch1_game1:
+    image: ${GAME_IMAGE}
+    restart: always
+    environment:
+      <<: *common-environment
+      GAME_HOSTNAME: ch1_game1
+      GAME_CHANNEL: 1
+      GAME_MARK_SERVER: 0
+      GAME_PORT: 13001
+      GAME_P2P_PORT: 14001
+      GAME_MAP_ALLOW: 21 24 25 26 108 61 63 69 70 73 216 217 303
+    expose:
+      - 13001
+      - 14001
+    ports:
+      - '13001:13001'
+    command: game
+    volumes:
+      - ./storage/log/ch1/game1/:/app/log/
+    depends_on:
+      mysql:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+  
+  ch1_game2:
+    image: ${GAME_IMAGE}
+    restart: always
+    environment:
+      <<: *common-environment
+      GAME_HOSTNAME: ch1_game2
+      GAME_CHANNEL: 1
+      GAME_MARK_SERVER: 0
+      GAME_PORT: 13002
+      GAME_P2P_PORT: 14002
+      GAME_MAP_ALLOW: 41 44 45 46 109 62 64 65 66 71 104 301 351
+    expose:
+      - 13002
+      - 14002
+    ports:
+      - '13002:13002'
+    command: game
+    volumes:
+      - ./storage/log/ch1/game2/:/app/log/
+    depends_on:
+      mysql:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      
+  # Game server (game99)
+  game99:
+    image: ${GAME_IMAGE}
+    restart: always
+    environment:
+      <<: *common-environment
+      GAME_HOSTNAME: game99
+      GAME_CHANNEL: 99
+      GAME_MARK_SERVER: 0
+      GAME_PORT: 13099
+      GAME_P2P_PORT: 14099
+      GAME_MAP_ALLOW: 113 81 100 101 103 105 110 111 114 118 119 120 121 122 123 124 125 126 127 128 181 182 183 200
+    expose:
+      - 13099
+      - 14099
+    ports:
+      - '13099:13099'
+    command: game
+    volumes:
+      - ./storage/log/game99/:/app/log/
+    depends_on:
+      mysql:
+        condition: service_healthy
+      web:
+        condition: service_healthy
