@@ -203,8 +203,10 @@ docker exec metin2-deploy-mysql-1 tail -f /tmp/mysql.log
 - `client-fix/introselect.py` — la versione FIXATA del file Python del client
 - `client-fix/introselect.original.py` — la versione originale per confronto
 - `metin2-deploy/` — config docker server (docker-compose.yml + .env.example + Caddyfile)
+- `gamepad-hook/` — sorgenti C++ del hook gamepad (XInput) + launcher
 - `db-fixes.sql` — script SQL con tutti i fix DB applicati durante il debug
 - `BUG-ANALYSIS.md` — analisi dettagliata del bug (tcpdump + sorgenti)
+- `GAMEPAD.md` — **documentazione completa del gamepad** (come funziona, come modificare i tasti, come ricompilare)
 
 ---
 
